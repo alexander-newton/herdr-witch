@@ -3,4 +3,5 @@
 //! large toad jumps out from under the witch's hat. Each scene is a pure
 //! function from the seconds elapsed to what is where.
 
+pub mod bats;
 pub mod cat;
