@@ -5,3 +5,4 @@
 
 pub mod bats;
 pub mod cat;
+pub mod toad;
