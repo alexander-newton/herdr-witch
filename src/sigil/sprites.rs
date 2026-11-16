@@ -157,10 +157,12 @@ pub fn parse_poses(txt: &str) -> Vec<Pose> {
 }
 
 /// The `count` poses in `<root>/assets/<name>`; the embedded ones if the
-/// file is missing or doesn't hold exactly that many.
+/// file is missing, doesn't hold exactly that many, or has a pose with
+/// nothing in it.
 fn read_poses(root: Option<&Path>, name: &str, fallback: &'static str, count: usize) -> Vec<Pose> {
     let poses = parse_poses(&read(root, name, fallback));
-    if poses.len() == count {
+    let drawn = |p: &Pose| (0..p.w * p.h).any(|i| p.at(i % p.w, i / p.w).is_some());
+    if poses.len() == count && poses.iter().all(drawn) {
         poses
     } else {
         parse_poses(fallback)
@@ -244,9 +246,13 @@ mod tests {
         std::fs::create_dir_all(root.join("assets")).unwrap();
         std::fs::write(root.join("assets/cat.txt"), "C\n").unwrap(); // one pose, not four
         std::fs::write(root.join("assets/toad.txt"), "").unwrap();
+        // The right number of poses, but one has nothing in it.
+        std::fs::write(root.join("assets/bat.txt"), "B.B\n\n...\n").unwrap();
         let a = load_assets(Some(&root));
         assert_eq!(a.cat, load_assets(None).cat);
         assert_eq!(a.toad, load_assets(None).toad);
+        assert_eq!(a.bat, load_assets(None).bat);
+        let _ = std::fs::remove_dir_all(&root);
     }
 
     #[test]

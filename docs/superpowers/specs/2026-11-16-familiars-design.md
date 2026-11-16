@@ -123,7 +123,7 @@ hour in all). Only one scene plays at a time.
 - **Cat and toad:** only when the big witch is shown (N ≥ 34 and room for
   her strip).
 - **Bats:** any pane whose sigil is big enough to read; the builder picks
-  the smallest N.
+  the smallest N (26: the bats do not shrink with the sigil).
 - **A resize in mid-scene:** if the pane can no longer show the scene
   playing (or the toad that is waiting), the scene is dropped.
 - **Narrow strips:** at N = 34 there are only about 9 px of floor on each
@@ -251,7 +251,7 @@ the result without waiting an hour.
 - No README entry, no config key.
 - The preview is a hidden command, drawn 29 columns wide with a fixed idle
   state.
-- The bats take nearer 10 s than the 6 s first proposed: at 6 s they would
+- The bats take about 17 s, not the 6 s first proposed: at 6 s they would
   be by far the fastest thing in the pane.
 - A scene the pane can no longer show after a resize is dropped.
 

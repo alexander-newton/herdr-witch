@@ -11,8 +11,11 @@ use std::f32::consts::{PI, TAU};
 /// what they pass over, so against the sigil they are moving gaps.
 pub const BODY: Rgb = [40.0, 24.0, 62.0];
 
-/// The smallest sigil that gets bats.
-pub const MIN_N: usize = 16;
+/// The smallest sigil that gets bats. They don't shrink with it: on a
+/// smaller one the swarm would hide much of the sigil and not read as bats.
+pub const MIN_N: usize = 26;
+/// The sigil size the wobble was tuned on; below it the wobble shrinks.
+const TUNED_N: f32 = 58.0;
 /// Seconds on each leg of the path. The legs in and out are timed so the
 /// swarm keeps roughly the pace it has at the spiral's ends.
 pub const FLY_IN: f32 = 1.2;
@@ -90,9 +93,10 @@ pub fn path(t: f32, n: f32, orbit: f32) -> (f32, f32) {
 /// One bat `t` seconds in: its position and flap pose (three flaps a second).
 pub fn bat_at(b: &Bat, t: f32, n: f32) -> ((f32, f32), usize) {
     let (x, y) = path(t - b.delay, n, b.orbit);
+    let amp = b.amp * (n / TUNED_N).min(1.0);
     let wobble = (
-        b.amp * (2.3 * t + b.phase).sin(),
-        b.amp * (1.7 * t + 2.0 * b.phase).cos(),
+        amp * (2.3 * t + b.phase).sin(),
+        amp * (1.7 * t + 2.0 * b.phase).cos(),
     );
     (
         (x + wobble.0, y + wobble.1),
@@ -217,6 +221,27 @@ mod tests {
                 let gap = mean_gap(&swarm, t);
                 assert!(gap >= N / 6.0, "seed {seed}: {gap} px apart at {t} s");
                 t += 0.25;
+            }
+        }
+    }
+
+    #[test]
+    fn wobble_shrinks_with_the_sigil() {
+        let b = Bat {
+            delay: 0.0,
+            orbit: 1.0,
+            phase: 0.7,
+            amp: 5.0,
+        };
+        for (n, most) in [(58.0, 5.0), (116.0, 5.0), (29.0, 2.5)] {
+            let mut t = 0.0;
+            while t < duration() {
+                let ((x, y), _) = bat_at(&b, t, n);
+                let on_path = path(t, n, 1.0);
+                assert!(
+                    (x - on_path.0).abs() <= most + 1e-3 && (y - on_path.1).abs() <= most + 1e-3
+                );
+                t += 0.1;
             }
         }
     }

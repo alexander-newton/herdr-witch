@@ -47,8 +47,6 @@ pub const HOP_HIGH: f32 = 3.0;
 
 /// Where her hand takes the hat, on its brim (witch-sprite pixels).
 const GRIP: (f32, f32) = (15.0, 8.0);
-/// Where her lowered arm leaves her hand.
-const HAND_REST: (f32, f32) = (15.05, 18.73);
 /// The toad on her head: its left edge from the witch's, and its feet row.
 const ON_HEAD: (i32, f32) = (3, 6.0);
 /// Where the leap lands: the toad's left edge from the witch's.
@@ -60,9 +58,14 @@ const LEAP_ARC: f32 = 36.0;
 pub struct Shot {
     /// The hat's offset from where it sits.
     pub hat: (f32, f32),
-    /// The hat arm's hand in witch-sprite pixels; `None` once the arm is
-    /// hers again.
+    /// Where the scene wants the hat arm's hand, in witch-sprite pixels;
+    /// `None` once the arm is hers again.
     pub hand: Option<(f32, f32)>,
+    /// How firmly the hand is held there: 1 = exactly there, 0 = wherever
+    /// her arm would be anyway. It rises as she reaches for the hat and
+    /// falls as she lets go, so the arm never jumps, whatever her arms
+    /// are doing for the typing meanwhile.
+    pub hold: f32,
     /// The toad: left edge and feet row in strip pixels, and its pose.
     pub toad: Option<(f32, f32, usize)>,
     /// How many of the toad's columns the hat has uncovered (`WIDTH` = all).
@@ -122,14 +125,14 @@ pub fn shot(t: f32, witch_x: i32) -> Shot {
     };
     // Sideways first, then down, so the brim clears her head.
     let hat = (HAT_OFF.0 * off, HAT_OFF.1 * off * off);
-    let hand = if t < lift {
-        Some(between(HAND_REST, GRIP, ease(t / REACH)))
+    let (hand, hold) = if t < lift {
+        (Some(GRIP), ease(t / REACH))
     } else if t < back {
-        Some((GRIP.0 + hat.0, GRIP.1 + hat.1))
+        (Some((GRIP.0 + hat.0, GRIP.1 + hat.1)), 1.0)
     } else if t < back + LOWER {
-        Some(between(GRIP, HAND_REST, ease((t - back) / LOWER)))
+        (Some(GRIP), 1.0 - ease((t - back) / LOWER))
     } else {
-        None
+        (None, 0.0)
     };
 
     let head = ((witch_x + ON_HEAD.0) as f32, ON_HEAD.1);
@@ -158,6 +161,7 @@ pub fn shot(t: f32, witch_x: i32) -> Shot {
     Shot {
         hat,
         hand,
+        hold,
         toad,
         shown: if t < wait { WIDTH * off } else { WIDTH },
         landings,

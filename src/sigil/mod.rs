@@ -221,6 +221,10 @@ struct Preview {
     /// Frames in a second, and frames left of the current pause.
     second: u32,
     pause: u32,
+    /// The scene asked for last, and whether it has been seen playing.
+    current: Option<(Scene, bool)>,
+    /// The scenes the pane had no room for.
+    skipped: Vec<Scene>,
 }
 
 impl Preview {
@@ -230,6 +234,8 @@ impl Preview {
             scenes: scenes.into(),
             second,
             pause: second,
+            current: None,
+            skipped: Vec::new(),
         }
     }
 
@@ -237,8 +243,14 @@ impl Preview {
     /// scene the pane has no room for is dropped by `Familiars`, so this
     /// never waits on one.
     fn next(&mut self, familiars: &mut Familiars) -> bool {
+        if let Some((scene, played)) = &mut self.current {
+            *played |= familiars.playing().is_some_and(|p| p.0 == *scene);
+        }
         if !familiars.idle() {
             return true;
+        }
+        if let Some((scene, false)) = self.current.take() {
+            self.skipped.push(scene);
         }
         if self.pause > 0 {
             self.pause -= 1;
@@ -248,6 +260,7 @@ impl Preview {
             return false;
         };
         familiars.force(scene);
+        self.current = Some((scene, false));
         self.pause = self.second;
         true
     }
@@ -299,6 +312,22 @@ pub fn preview(cfg: &Config, args: &[String]) -> i32 {
         }
         let over = anim.familiars.as_mut().is_none_or(|f| !preview.next(f));
         if over {
+            // The cursor back, on a line of its own under the last frame.
+            drop(out);
+            println!();
+            for scene in &preview.skipped {
+                let why = match scene {
+                    Scene::Bats => "the sigil is too small",
+                    Scene::Cat | Scene::Toad => {
+                        "it needs the full-size witch under the sigil: at least 17 columns \
+                         (34 with half-blocks), and rows for both"
+                    }
+                };
+                eprintln!(
+                    "herdr-witch scene: no room for the {} here ({why})",
+                    scene.name()
+                );
+            }
             return 0;
         }
         pacer.wait();
@@ -438,6 +467,31 @@ mod tests {
         for bad in ["", "dog", "cat x", "cat 40 9"] {
             assert_eq!(parse_preview(&args(bad)), None, "{bad:?}");
         }
+    }
+
+    #[test]
+    fn preview_names_the_scenes_it_could_not_play() {
+        let run = |stage: Stage| {
+            let mut f = Familiars::new(1, 12);
+            let mut p = Preview::new(Scene::ALL.to_vec(), 12);
+            loop {
+                f.step(stage, 0.0);
+                if !p.next(&mut f) {
+                    return p.skipped;
+                }
+            }
+        };
+        // No witch: only the bats have room.
+        let mini = Stage {
+            n: 29,
+            witch_x: None,
+        };
+        assert_eq!(run(mini), [Scene::Cat, Scene::Toad]);
+        let big = Stage {
+            n: 58,
+            witch_x: Some(21),
+        };
+        assert_eq!(run(big), []);
     }
 
     /// Frames a preview of `scenes` runs for on `stage`.

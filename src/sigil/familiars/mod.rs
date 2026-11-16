@@ -29,6 +29,14 @@ pub enum Scene {
 impl Scene {
     pub const ALL: [Scene; 3] = [Scene::Cat, Scene::Bats, Scene::Toad];
 
+    pub fn name(self) -> &'static str {
+        match self {
+            Scene::Cat => "cat",
+            Scene::Bats => "bats",
+            Scene::Toad => "toad",
+        }
+    }
+
     pub fn parse(name: &str) -> Option<Scene> {
         match name {
             "cat" => Some(Scene::Cat),
@@ -280,6 +288,16 @@ mod tests {
         assert_eq!((cat, toad), (0, 0));
         assert!(bats > 200);
         assert_eq!(starts(TINY, 0.0, 300), [0, 0, 0]);
+    }
+
+    #[test]
+    fn a_sigil_too_small_for_the_swarm_gets_no_bats() {
+        // The bats don't shrink with the sigil: on a small one the swarm
+        // would blot out a third of it.
+        let sigil = |n| Stage { n, witch_x: None };
+        assert!(!sigil(20).fits(Scene::Bats));
+        assert!(sigil(26).fits(Scene::Bats));
+        assert_eq!(starts(sigil(20), 0.0, 300), [0, 0, 0]);
     }
 
     #[test]

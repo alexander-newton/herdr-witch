@@ -51,3 +51,64 @@ fn preview_with_no_room_to_draw_ends_by_itself() {
     let err = String::from_utf8_lossy(&out.stderr);
     assert!(err.contains("too small"), "{err}");
 }
+
+/// A pty of `cols` x `rows`: (master, slave).
+fn pty(cols: u16, rows: u16) -> (rustix::fd::OwnedFd, std::fs::File) {
+    use rustix::pty::{OpenptFlags, grantpt, openpt, ptsname, unlockpt};
+    use rustix::termios::{Winsize, tcsetwinsize};
+    let master = openpt(OpenptFlags::RDWR | OpenptFlags::NOCTTY).unwrap();
+    grantpt(&master).unwrap();
+    unlockpt(&master).unwrap();
+    let name = ptsname(&master, Vec::new()).unwrap();
+    let slave = std::fs::File::options()
+        .read(true)
+        .write(true)
+        .open(name.to_str().unwrap())
+        .unwrap();
+    let size = Winsize {
+        ws_col: cols,
+        ws_row: rows,
+        ws_xpixel: 0,
+        ws_ypixel: 0,
+    };
+    tcsetwinsize(&slave, size).unwrap();
+    (master, slave)
+}
+
+#[test]
+fn preview_in_a_short_terminal_says_what_it_skipped() {
+    // 29 columns by 20 rows: room for the sigil but not the witch under
+    // it, so the cat cannot play. Seen: the sigil for two seconds, then
+    // exit 0 without a word, which reads as broken.
+    let (master, slave) = pty(29, 20);
+    let mut child = witch(&["scene", "cat"])
+        .stdin(Stdio::from(slave.try_clone().unwrap()))
+        .stdout(Stdio::from(slave))
+        .spawn()
+        .unwrap();
+    // Keep reading the frames so the preview never blocks on a full pty.
+    let reader = std::thread::spawn(move || {
+        let mut frames = Vec::new();
+        let mut buf = [0u8; 65536];
+        while let Ok(n) = rustix::io::read(&master, &mut buf) {
+            if n == 0 {
+                break;
+            }
+            frames.extend_from_slice(&buf[..n]);
+        }
+        frames
+    });
+    let t = Instant::now();
+    while child.try_wait().unwrap().is_none() && t.elapsed() < Duration::from_secs(10) {
+        std::thread::sleep(Duration::from_millis(20));
+    }
+    let exited = child.try_wait().unwrap().is_some();
+    let _ = child.kill();
+    let out = child.wait_with_output().unwrap();
+    let frames = reader.join().unwrap();
+    assert!(exited, "still running after 10 s");
+    assert_eq!(out.status.code(), Some(0));
+    assert!(frames.windows(8).any(|w| w == b"\x1b[?2026h"), "it drew");
+    let err = String::from_utf8_lossy(&out.stderr);
+    assert!(err.contains("no room") && err.contains("cat"), "{err}");
+}

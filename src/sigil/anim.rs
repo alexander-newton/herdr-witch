@@ -411,10 +411,13 @@ impl SigilAnim {
             let ang = if side == 0 { ang_l } else { ang_r };
             let (shx, shy) = ((sx + ox) as f32, (sy + oy) as f32);
             let (mut hx, mut hy) = (shx + spr.arm_len * ang.cos(), shy + spr.arm_len * ang.sin());
-            // The hand on the hat goes where the toad's scene puts it.
+            // The hand on the hat goes where the toad's scene puts it, as
+            // firmly as the scene holds it there.
             let hat_hand = toad.and_then(|s| s.hand).filter(|_| side == 1);
             if let Some(hand) = hat_hand {
-                (hx, hy) = (sx as f32 + hand.0, sy as f32 + hand.1);
+                let hold = toad.map_or(0.0, |s| s.hold);
+                hx += (sx as f32 + hand.0 - hx) * hold;
+                hy += (sy as f32 + hand.1 - hy) * hold;
                 if let Some((dx, dy)) = hat {
                     // The hat where she holds it, in front of her other arm.
                     for j in 0..toad::HAT_ROWS.min(spr.h) {
@@ -682,6 +685,41 @@ mod tests {
             }
             assert!(differed > 50, "{scene:?} drew on {differed} frames");
             assert!(on.familiars.as_ref().unwrap().idle(), "{scene:?} ended");
+        }
+    }
+
+    #[test]
+    fn hat_arm_never_jumps() {
+        // Seen: typing while the hat went back on, the arm was lowered to
+        // her side and then snapped up to join the other, 15 px in a frame.
+        // An arm moves about 4 px a frame at its fastest.
+        let (f, geo, assets, mut buf, mut a) = stage(40, 40, Mode::HalfBlock, 5);
+        a.familiars.as_mut().unwrap().force(Scene::Toad);
+        let strip = f.witch.unwrap().1.1;
+        let middle = witch_x(f.n, &assets.big) as f32 + 8.5;
+        let mut was: Option<(f32, f32)> = None;
+        for i in 0..140 {
+            a.step(0, (20..120).contains(&i));
+            a.draw(&mut buf, &f, &geo, &assets, Mode::HalfBlock);
+            // Her hand on the right of the screen: its skin-coloured pixels.
+            let hand: Vec<(f32, f32)> = (strip..strip + 24)
+                .flat_map(|y| (0..buf.w).map(move |x| (x, y)))
+                .filter(|&(x, y)| x as f32 > middle && buf.get(x, y) == SKIN)
+                .map(|(x, y)| (x as f32, y as f32))
+                .collect();
+            if hand.is_empty() {
+                continue; // covered by a spark this frame
+            }
+            let n = hand.len() as f32;
+            let at = (
+                hand.iter().map(|p| p.0).sum::<f32>() / n,
+                hand.iter().map(|p| p.1).sum::<f32>() / n,
+            );
+            if let Some(was) = was {
+                let moved = (at.0 - was.0).hypot(at.1 - was.1);
+                assert!(moved <= 6.0, "frame {i}: her hand moved {moved} px");
+            }
+            was = Some(at);
         }
     }
 
