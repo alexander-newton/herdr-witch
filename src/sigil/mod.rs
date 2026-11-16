@@ -1,4 +1,5 @@
 pub mod anim;
+pub mod familiars;
 pub mod fit;
 pub mod geometry;
 pub mod sprites;
