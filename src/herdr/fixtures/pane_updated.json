@@ -1,0 +1,24 @@
+{
+  "data": {
+    "pane": {
+      "agent_status": "unknown",
+      "cwd": "/tmp/x",
+      "focused": true,
+      "foreground_cwd": "/tmp/x",
+      "pane_id": "w1:p1",
+      "revision": 1,
+      "scroll": {
+        "max_offset_from_bottom": 0,
+        "offset_from_bottom": 0,
+        "viewport_rows": 40
+      },
+      "tab_id": "w1:t1",
+      "terminal_id": "term1",
+      "terminal_title": "title",
+      "terminal_title_stripped": "title",
+      "workspace_id": "w1"
+    },
+    "type": "pane_updated"
+  },
+  "event": "pane_updated"
+}

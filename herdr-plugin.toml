@@ -1,0 +1,52 @@
+# herdr plugin manifest (herdr 0.9.5). Commands run from the plugin root.
+id = "herdr-witch"
+name = "herdr-witch"
+version = "0.1.0"
+description = "A summoning-circle sigil and a cursed grimoire line in every tab"
+min_herdr_version = "0.9.5"
+platforms = ["linux"]
+
+[[build]]
+command = ["cargo", "build", "--release", "--locked"]
+
+# herdr runs startup hooks when the server starts. The daemon is a
+# singleton per session; "Summon here" also starts it if none is running.
+[[startup]]
+command = ["target/release/herdr-witch", "daemon"]
+
+# Titles must match SIGIL_TITLE / GRIM_TITLE in src/daemon/decorate.rs:
+# herdr reports them as the pane label, which is how the daemon finds its
+# panes again after a restart.
+[[panes]]
+id = "sigil"
+title = "✶ sigil"
+command = ["target/release/herdr-witch", "sigil"]
+placement = "split"
+
+[[panes]]
+id = "grimoire"
+title = "✶ grimoire"
+command = ["target/release/herdr-witch", "grimoire"]
+placement = "split"
+
+[[panes]]
+id = "test"
+title = "✶ test rendering"
+command = ["target/release/herdr-witch", "test"]
+placement = "popup"
+width = "80%"
+height = "80%"
+
+[[actions]]
+id = "summon"
+title = "Summon here"
+description = "Add the sigil and grimoire to this tab, even ones you closed"
+command = ["target/release/herdr-witch", "summon"]
+contexts = ["tab"]
+
+[[actions]]
+id = "test-rendering"
+title = "Test rendering"
+description = "Show the sigil in octants and half-blocks, to check the terminal"
+command = ["sh", "-c", "exec \"${HERDR_BIN_PATH:-herdr}\" plugin pane open --plugin herdr-witch --entrypoint test"]
+contexts = ["global"]

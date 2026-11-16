@@ -1,0 +1,53 @@
+{
+  "data": {
+    "layout": {
+      "area": {
+        "height": 40,
+        "width": 120,
+        "x": 0,
+        "y": 0
+      },
+      "focused_pane_id": "w1:p2",
+      "panes": [
+        {
+          "focused": true,
+          "pane_id": "w1:p2",
+          "rect": {
+            "height": 20,
+            "width": 120,
+            "x": 0,
+            "y": 0
+          }
+        },
+        {
+          "focused": false,
+          "pane_id": "w1:p3",
+          "rect": {
+            "height": 20,
+            "width": 120,
+            "x": 0,
+            "y": 20
+          }
+        }
+      ],
+      "splits": [
+        {
+          "direction": "down",
+          "id": "split_0_root",
+          "ratio": 0.5,
+          "rect": {
+            "height": 40,
+            "width": 120,
+            "x": 0,
+            "y": 0
+          }
+        }
+      ],
+      "tab_id": "w1:t2",
+      "workspace_id": "w1",
+      "zoomed": false
+    },
+    "type": "layout_updated"
+  },
+  "event": "layout_updated"
+}

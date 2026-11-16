@@ -1,0 +1,8 @@
+{
+  "data": {
+    "pane_id": "w1:p4",
+    "type": "pane_exited",
+    "workspace_id": "w1"
+  },
+  "event": "pane_exited"
+}
