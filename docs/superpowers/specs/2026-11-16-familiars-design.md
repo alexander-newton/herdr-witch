@@ -25,7 +25,7 @@ duration and "nothing moves fast" disagree, slow wins.
    turns to face the viewer. It blinks; its eyes turn red and return to
    normal; it blinks again. Then it stands and walks on, passing behind the
    witch, and out at the left.
-2. **Bats (about 15 s).** A swarm of bats comes in from the top left,
+2. **Bats (about 17 s).** A swarm of bats comes in from the top left,
    spirals in front of the sigil, and leaves at the right.
 3. **Toad (about 10 s).** The witch takes off her hat. A large magical toad
    is sitting on top of her hair. It jumps down to the floor and hops
@@ -148,7 +148,11 @@ only overlaps her on the way out.
 flap. The swarm follows one path: in from beyond the top left of the sigil
 to its upper-left rim, about two turns of an inward spiral around the
 centre, then out along the tangent to the right edge. Each bat follows the
-path with its own delay, spread over about a second, and a small wobble.
+path with its own delay (spread over about two and a half seconds), its
+own orbit (from about half to a little over the swarm's radius) and a
+small wobble, so the swarm fills a band and stays spread out as the spiral
+tightens. (The user asked for this after seeing the first version bunch
+up.)
 
 **Toad.**
 

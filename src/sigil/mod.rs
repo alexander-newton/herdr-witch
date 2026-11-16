@@ -467,8 +467,15 @@ mod tests {
             (bats + 20..=bats + 30).contains(&one),
             "a second each side: {one}"
         );
+        // All three in turn: their lengths, and a second around each.
+        let scenes =
+            familiars::cat::duration(58, 21) + bats::duration() + familiars::toad::duration(21);
+        let want = (scenes * 12.0) as u32 + 4 * 12;
         let all = preview_frames(Scene::ALL.to_vec(), big);
-        assert!(all > one * 3);
+        assert!(
+            (want..=want + 12).contains(&all),
+            "{all} frames, about {want}"
+        );
     }
 
     #[test]
