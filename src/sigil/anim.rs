@@ -48,6 +48,13 @@ fn lerp(a: f32, b: f32, t: f32) -> f32 {
     a + (b - a) * t
 }
 
+/// Extra bolts per frame around the circle while the witch's arms are raised.
+const TYPING_BOLT_RATE: f32 = 0.04;
+/// Per-frame chance of a bolt from the witch's hands up into the sigil.
+const TYPING_WITCH_BOLT_CHANCE: f32 = 0.05;
+/// Extra per-frame chance of a full-sigil strike flash while summoning.
+const TYPING_STRIKE_CHANCE: f32 = 0.005;
+
 pub fn intensity(working: u32, arms: f32, t: f32) -> f32 {
     let base = if working == 0 {
         0.12 + 0.05 * (t * 0.8).sin()
@@ -94,7 +101,12 @@ impl SigilAnim {
         let nf = geo.n as f32;
         self.bolts.retain(|b| b.life > 0);
         self.sparks.retain(|s| s.life > 0.0);
-        let rate = n * 0.3 + if self.arms > 0.6 { 0.25 } else { 0.0 };
+        let rate = n * 0.3
+            + if self.arms > 0.6 {
+                TYPING_BOLT_RATE
+            } else {
+                0.0
+            };
         for _ in 0..self.count(rate) {
             let ai = self.rng.usize(0..5);
             let a = geo.verts[ai];
@@ -116,7 +128,7 @@ impl SigilAnim {
                 });
             }
         }
-        if self.arms > 0.7 && self.rng.f32() < 0.22 {
+        if self.arms > 0.7 && self.rng.f32() < TYPING_WITCH_BOLT_CHANCE {
             let x = self.rnd(nf * 0.3, nf * 0.7);
             let to = geo.verts[2 + self.rng.usize(0..2)];
             self.bolts.push(Bolt {
@@ -221,7 +233,13 @@ impl SigilAnim {
         let mut pb = Buf::new(nn, nn);
         pb.clear(BG);
         let mut f = 1.0 - self.rng.f32() * (0.06 + n * 0.07);
-        let strike = self.rng.f32() < n * 0.018 + if self.arms > 0.8 { 0.03 } else { 0.0 };
+        let strike = self.rng.f32()
+            < n * 0.018
+                + if self.arms > 0.8 {
+                    TYPING_STRIKE_CHANCE
+                } else {
+                    0.0
+                };
         let mut base = if i < 0.5 {
             lerp_c(VIOLET, GOLD, i * 2.0)
         } else {
