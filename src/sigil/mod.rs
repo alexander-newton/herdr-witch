@@ -11,9 +11,11 @@ use crate::render::frame::FrameWriter;
 use crate::render::pacer::{HIDDEN_POLL, HiddenGate, Pacer};
 use crate::render::raster::Buf;
 use crate::render::tty::TtyGuard;
+use familiars::{Familiars, Scene};
 use fit::Mode;
 use geometry::SigilGeometry;
 use sprites::{Assets, load_assets};
+use std::collections::VecDeque;
 use std::path::Path;
 
 /// Caches the sigil geometry, rebuilding only when `n` changes.
@@ -157,6 +159,7 @@ pub fn run(cfg: &Config) {
     let dir = crate::paths::runtime_dir();
     let seed = ipc::now_ms() ^ u64::from(std::process::id());
     let mut anim = anim::SigilAnim::new(seed);
+    anim.enable_familiars(cfg.fps);
     let mut cache = GeoCache::default();
     let mut renderer = SigilRenderer::default();
     let _tty = TtyGuard::new();
@@ -189,6 +192,114 @@ pub fn run(cfg: &Config) {
         frames += 1;
         if out.frame(body).is_err() {
             return;
+        }
+        pacer.wait();
+    }
+}
+
+/// The preview's width unless told otherwise: a typical sigil pane.
+pub const PREVIEW_COLS: usize = 29;
+
+/// The scenes and the width a preview was asked for:
+/// `<cat|bats|toad|all> [columns]`.
+fn parse_preview(args: &[String]) -> Option<(Vec<Scene>, usize)> {
+    let (name, cols) = match args {
+        [name] => (name, PREVIEW_COLS),
+        [name, cols] => (name, cols.parse().ok()?),
+        _ => return None,
+    };
+    let scenes = match name.as_str() {
+        "all" => Scene::ALL.to_vec(),
+        name => vec![Scene::parse(name)?],
+    };
+    Some((scenes, cols))
+}
+
+/// Plays scenes in turn, with a second before, between and after them.
+struct Preview {
+    scenes: VecDeque<Scene>,
+    /// Frames in a second, and frames left of the current pause.
+    second: u32,
+    pause: u32,
+}
+
+impl Preview {
+    fn new(scenes: Vec<Scene>, fps: u8) -> Self {
+        let second = u32::from(fps.max(1));
+        Preview {
+            scenes: scenes.into(),
+            second,
+            pause: second,
+        }
+    }
+
+    /// Once per frame, after drawing; `false` when the preview is over. A
+    /// scene the pane has no room for is dropped by `Familiars`, so this
+    /// never waits on one.
+    fn next(&mut self, familiars: &mut Familiars) -> bool {
+        if !familiars.idle() {
+            return true;
+        }
+        if self.pause > 0 {
+            self.pause -= 1;
+            return true;
+        }
+        let Some(scene) = self.scenes.pop_front() else {
+            return false;
+        };
+        familiars.force(scene);
+        self.pause = self.second;
+        true
+    }
+}
+
+/// `herdr-witch scene <cat|bats|toad|all> [columns]`: play familiars now,
+/// in this terminal, and return the exit code. Hidden (it is not in the
+/// usage text): the scenes are meant to be come upon. The sigil is drawn
+/// pane-sized at the left, idle whatever the daemon says, and the preview
+/// ends by itself, since Ctrl-C is ignored here as in any witch pane.
+pub fn preview(cfg: &Config, args: &[String]) -> i32 {
+    let Some((scenes, cols)) = parse_preview(args) else {
+        eprintln!("usage: herdr-witch scene cat|bats|toad|all [columns]");
+        return 2;
+    };
+    let cfg = cfg.sanitized();
+    let assets = load_assets(
+        std::env::var_os("HERDR_PLUGIN_ROOT")
+            .as_deref()
+            .map(Path::new),
+    );
+    let mut anim = anim::SigilAnim::new(ipc::now_ms());
+    anim.enable_familiars(cfg.fps);
+    let mut preview = Preview::new(scenes, cfg.fps);
+    let mut cache = GeoCache::default();
+    let mut renderer = SigilRenderer::default();
+    let idle = GlobalState::default();
+    let _tty = TtyGuard::new();
+    let mut out = FrameWriter::new();
+    if out.begin().is_err() {
+        return 1;
+    }
+    let mut pacer = Pacer::new(cfg.fps);
+    loop {
+        let (term_cols, rows) = term_size();
+        let cols = cols.min(term_cols);
+        // Nothing drawn means no frame for a scene to play on: stop rather
+        // than wait for one.
+        if fit::fit(cols, rows, cfg.render).is_none() {
+            drop(out);
+            eprintln!("herdr-witch scene: the terminal is too small to draw in");
+            return 1;
+        }
+        let body = renderer.render(
+            cols, rows, cfg.render, &mut anim, &assets, &mut cache, &idle,
+        );
+        if out.frame(body).is_err() {
+            return 1;
+        }
+        let over = anim.familiars.as_mut().is_none_or(|f| !preview.next(f));
+        if over {
+            return 0;
         }
         pacer.wait();
     }
@@ -306,6 +417,68 @@ mod tests {
                 "{mode:?}: {diff_len} of {full_len}"
             );
         }
+    }
+
+    use familiars::{Stage, bats};
+
+    fn args(s: &str) -> Vec<String> {
+        s.split_whitespace().map(String::from).collect()
+    }
+
+    #[test]
+    fn preview_arguments() {
+        assert_eq!(
+            parse_preview(&args("cat")),
+            Some((vec![Scene::Cat], PREVIEW_COLS))
+        );
+        assert_eq!(
+            parse_preview(&args("all 40")),
+            Some((Scene::ALL.to_vec(), 40))
+        );
+        for bad in ["", "dog", "cat x", "cat 40 9"] {
+            assert_eq!(parse_preview(&args(bad)), None, "{bad:?}");
+        }
+    }
+
+    /// Frames a preview of `scenes` runs for on `stage`.
+    fn preview_frames(scenes: Vec<Scene>, stage: Stage) -> u32 {
+        let mut f = Familiars::new(1, 12);
+        let mut p = Preview::new(scenes, 12);
+        let mut frames = 0;
+        loop {
+            f.step(stage, 0.0);
+            if !p.next(&mut f) {
+                return frames;
+            }
+            frames += 1;
+            assert!(frames < 12 * 120, "the preview must end by itself");
+        }
+    }
+
+    #[test]
+    fn preview_plays_then_ends() {
+        let big = Stage {
+            n: 58,
+            witch_x: Some(21),
+        };
+        let bats = (bats::duration() * 12.0) as u32;
+        let one = preview_frames(vec![Scene::Bats], big);
+        assert!(
+            (bats + 20..=bats + 30).contains(&one),
+            "a second each side: {one}"
+        );
+        let all = preview_frames(Scene::ALL.to_vec(), big);
+        assert!(all > one * 3);
+    }
+
+    #[test]
+    fn preview_ends_when_nothing_can_play() {
+        // A terminal too small for the witch: the cat is dropped, not waited for.
+        let tiny = Stage {
+            n: 8,
+            witch_x: None,
+        };
+        assert!(preview_frames(Scene::ALL.to_vec(), tiny) <= 12 * 6);
     }
 
     #[test]
