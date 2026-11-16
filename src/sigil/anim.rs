@@ -333,7 +333,7 @@ impl SigilAnim {
             wb.set(x as i32, hh as i32 - 1, lerp_c(DEEP, HALO, 1.0 - d));
             wb.add(x as i32, hh as i32 - 2, HALO, (1.0 - d) * 0.4);
         }
-        let sx = rd((n as f32 - spr.w as f32) / 2.0);
+        let sx = witch_x(n, spr);
         let sy = 1;
         // The witch's silhouette, for the rim light: `mask[y * n + x]` for
         // x < n, y <= hh. A pixel elsewhere could not light a rim on the
@@ -410,6 +410,11 @@ impl SigilAnim {
             s.life -= 1.0;
         }
     }
+}
+
+/// The witch's left edge in her strip: centred.
+pub(crate) fn witch_x(n: usize, spr: &Sprite) -> i32 {
+    rd((n as f32 - spr.w as f32) / 2.0)
 }
 
 fn blit(dst: &mut Buf, src: &Buf, (ox, oy): (usize, usize)) {
