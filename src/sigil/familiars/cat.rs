@@ -2,7 +2,20 @@
 //! witch to look at the sigil and then at us, and out at the left, passing
 //! behind her.
 
+use super::FLOOR;
+use crate::palette::{Rgb, lerp_c};
+use crate::render::raster::Buf;
+use crate::sigil::anim::rd;
+use crate::sigil::sprites::Pose;
 use std::f32::consts::PI;
+
+/// Darker than the background: a black cat.
+pub const BODY: Rgb = [3.0, 2.0, 6.0];
+/// A dim light added along its top edges, so its outline can be made out.
+pub const RIM: Rgb = [32.0, 14.0, 49.0];
+/// Its eyes, and what they turn in the middle of the scene.
+pub const AMBER: Rgb = [230.0, 160.0, 50.0];
+pub const RED: Rgb = [230.0, 40.0, 30.0];
 
 /// The poses in `assets/cat.txt`, in the file's order.
 pub const WALK_A: usize = 0;
@@ -90,6 +103,31 @@ pub fn shot(t: f32, n: usize, witch_x: i32) -> Shot {
         u -= len;
     }
     walking(stop - SPEED * u)
+}
+
+/// Draw the cat on the witch's strip, its feet on the floor.
+pub(crate) fn draw(wb: &mut Buf, poses: &[Pose], shot: &Shot) {
+    let Some(pose) = poses.get(shot.pose) else {
+        return;
+    };
+    let (x0, y0) = (rd(shot.x), FLOOR as i32 + 1 - pose.h as i32);
+    let eye = match shot.eyes {
+        Eyes::Open => AMBER,
+        Eyes::Shut => BODY,
+        Eyes::Red(b) => lerp_c(AMBER, RED, b),
+    };
+    for j in 0..pose.h {
+        for k in 0..pose.w {
+            let Some(letter) = pose.at(k, j) else {
+                continue;
+            };
+            let (x, y) = (x0 + k as i32, y0 + j as i32);
+            wb.set(x, y, if letter == 'o' { eye } else { BODY });
+            if j == 0 || pose.at(k, j - 1).is_none() {
+                wb.add(x, y - 1, RIM, 1.0);
+            }
+        }
+    }
 }
 
 #[cfg(test)]

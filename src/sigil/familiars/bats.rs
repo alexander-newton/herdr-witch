@@ -1,7 +1,15 @@
 //! The bats: in from the top left, two turns of an inward spiral in front
 //! of the sigil, and out at the right.
 
+use crate::palette::Rgb;
+use crate::render::raster::Buf;
+use crate::sigil::anim::rd;
+use crate::sigil::sprites::Pose;
 use std::f32::consts::{PI, TAU};
+
+/// A dim violet-grey, a little lighter than the background. Bats hide
+/// what they pass over, so against the sigil they are moving gaps.
+pub const BODY: Rgb = [40.0, 24.0, 62.0];
 
 /// The smallest sigil that gets bats.
 pub const MIN_N: usize = 16;
@@ -74,6 +82,37 @@ pub fn bat_at(b: &Bat, t: f32, n: f32) -> ((f32, f32), usize) {
         (x + wobble.0, y + wobble.1),
         (t * 6.0 + b.phase) as usize % 2,
     )
+}
+
+/// Draw the swarm on the pane; `origin` is the sigil's top-left corner.
+/// A bat is drawn only while it is on its way: not before it sets out,
+/// nor once it has reached the path's end.
+pub(crate) fn draw(
+    buf: &mut Buf,
+    poses: &[Pose],
+    swarm: &[Bat],
+    t: f32,
+    n: usize,
+    origin: (usize, usize),
+) {
+    for b in swarm {
+        if !(0.0..FLY_IN + SPIRAL + FLY_OUT).contains(&(t - b.delay)) {
+            continue;
+        }
+        let ((x, y), flap) = bat_at(b, t, n as f32);
+        let Some(pose) = poses.get(flap) else {
+            continue;
+        };
+        let x0 = origin.0 as i32 + rd(x) - pose.w as i32 / 2;
+        let y0 = origin.1 as i32 + rd(y) - pose.h as i32 / 2;
+        for j in 0..pose.h {
+            for k in 0..pose.w {
+                if pose.at(k, j).is_some() {
+                    buf.set(x0 + k as i32, y0 + j as i32, BODY);
+                }
+            }
+        }
+    }
 }
 
 #[cfg(test)]

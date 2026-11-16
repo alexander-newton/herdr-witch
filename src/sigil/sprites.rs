@@ -62,7 +62,7 @@ const TOAD_TXT: &str = include_str!("../../assets/toad.txt");
 const BAT_TXT: &str = include_str!("../../assets/bat.txt");
 const BARE_TXT: &str = include_str!("../../assets/witch_bare.txt");
 
-fn colour(c: char) -> Option<Rgb> {
+pub(crate) fn colour(c: char) -> Option<Rgb> {
     match c {
         'H' => Some([31.0, 11.0, 51.0]),
         'h' => Some([107.0, 47.0, 163.0]),

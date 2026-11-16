@@ -2,6 +2,17 @@
 //! leaps to the floor and hops slowly out at the left, and she puts the
 //! hat back.
 
+pub use super::FLOOR;
+use crate::palette::Rgb;
+use crate::render::raster::Buf;
+use crate::sigil::anim::rd;
+use crate::sigil::sprites::Pose;
+
+/// Muted green, a darker underside, gold eyes.
+pub const BODY: Rgb = [62.0, 104.0, 58.0];
+pub const UNDER: Rgb = [38.0, 66.0, 44.0];
+pub const EYE: Rgb = [220.0, 180.0, 70.0];
+
 /// The poses in `assets/toad.txt`, in the file's order.
 pub const SIT: usize = 0;
 pub const LEAP: usize = 1;
@@ -13,8 +24,9 @@ pub const HAT_ROWS: usize = 10;
 pub const HAT_OFF: (f32, f32) = (9.0, 7.0);
 /// The toad's width in pixels.
 pub const WIDTH: f32 = 9.0;
-/// The row things stand on.
-pub const FLOOR: f32 = 22.0;
+/// Where the top of her head (`assets/witch_bare.txt`) goes, in
+/// witch-sprite pixels.
+pub const BARE_AT: (i32, i32) = (4, 6);
 
 /// Seconds: her hand rises to the hat, takes it off, she holds it while
 /// the toad waits and then leaps, puts it back, and lowers her arm.
@@ -143,6 +155,28 @@ pub fn shot(t: f32, witch_x: i32) -> Shot {
         toad,
         shown: if t < wait { WIDTH * off } else { WIDTH },
         landings,
+    }
+}
+
+/// Draw the toad on the witch's strip: the columns the hat has uncovered.
+pub(crate) fn draw(wb: &mut Buf, poses: &[Pose], shot: &Shot) {
+    let Some((x, feet, pose)) = shot.toad else {
+        return;
+    };
+    let Some(pose) = poses.get(pose) else {
+        return;
+    };
+    let (x0, y0) = (rd(x), rd(feet) + 1 - pose.h as i32);
+    for j in 0..pose.h {
+        for k in (0..pose.w).take_while(|k| (*k as f32) < shot.shown) {
+            let c = match pose.at(k, j) {
+                Some('o') => EYE,
+                Some('t') => UNDER,
+                Some(_) => BODY,
+                None => continue,
+            };
+            wb.set(x0 + k as i32, y0 + j as i32, c);
+        }
     }
 }
 

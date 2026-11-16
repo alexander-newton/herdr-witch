@@ -7,10 +7,17 @@ pub mod bats;
 pub mod cat;
 pub mod toad;
 
-use super::anim::witch_x;
+use super::anim::{Particle, rd, witch_x};
 use super::fit::Fit;
 use super::sprites::{Assets, WitchSize};
+use crate::palette::{CYAN, GOLD, mul};
+use crate::render::raster::Buf;
 use std::collections::VecDeque;
+
+/// The row of the witch's strip that things stand on.
+pub const FLOOR: f32 = 22.0;
+/// Seconds a spark from the toad's landing lasts.
+const SPARK_LIFE: f32 = 0.5;
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum Scene {
@@ -86,6 +93,14 @@ pub struct Familiars {
     toad_waiting: bool,
     /// Scenes to play next without the dice.
     forced: VecDeque<Scene>,
+    /// What the pane had room for at the last `step`.
+    stage: Stage,
+    /// The bats of the swarm flying.
+    swarm: Vec<bats::Bat>,
+    /// Sparks from the toad's landings, and how many landings have had
+    /// theirs. Their `life` is in seconds.
+    sparks: Vec<Particle>,
+    landings: u32,
 }
 
 impl Familiars {
@@ -96,12 +111,20 @@ impl Familiars {
             playing: None,
             toad_waiting: false,
             forced: VecDeque::new(),
+            stage: Stage {
+                n: 0,
+                witch_x: None,
+            },
+            swarm: Vec::new(),
+            sparks: Vec::new(),
+            landings: 0,
         }
     }
 
     /// Once per frame, before drawing: advance the scene playing, or see
     /// whether one starts. `arms` is how far the witch's arms are raised.
     pub fn step(&mut self, stage: Stage, arms: f32) {
+        self.stage = stage;
         if let Some((scene, t)) = &mut self.playing {
             *t += 1.0 / f32::from(self.fps);
             // Over, or the pane was resized and can't show it any more.
@@ -129,6 +152,67 @@ impl Familiars {
         }
         if let Some(scene) = next {
             self.playing = Some((scene, 0.0));
+            self.sparks.clear();
+            self.landings = 0;
+            if scene == Scene::Bats {
+                self.swarm = bats::swarm(stage.n, &mut self.rng);
+            }
+        }
+    }
+
+    /// The cat, on the witch's strip, before she is drawn: it passes
+    /// behind her.
+    pub(crate) fn draw_behind_witch(&self, wb: &mut Buf, assets: &Assets) {
+        if let (Some((Scene::Cat, t)), Some(witch_x)) = (self.playing, self.stage.witch_x) {
+            cat::draw(wb, &assets.cat, &cat::shot(t, self.stage.n, witch_x));
+        }
+    }
+
+    /// What the toad's scene asks of the witch this frame, if it is playing.
+    pub(crate) fn toad_shot(&self) -> Option<toad::Shot> {
+        match (self.playing, self.stage.witch_x) {
+            (Some((Scene::Toad, t)), Some(witch_x)) => Some(toad::shot(t, witch_x)),
+            _ => None,
+        }
+    }
+
+    /// The toad and the sparks of its landings, on the strip, after the
+    /// witch and her rim light.
+    pub(crate) fn draw_in_front_of_witch(&mut self, wb: &mut Buf, assets: &Assets) {
+        let Some(shot) = self.toad_shot() else {
+            return;
+        };
+        toad::draw(wb, &assets.toad, &shot);
+        if let Some((x, _, _)) = shot.toad
+            && shot.landings > self.landings
+        {
+            for _ in 0..3 {
+                let c = if self.rng.bool() { CYAN } else { GOLD };
+                self.sparks.push(Particle {
+                    x: x + self.rng.f32() * toad::WIDTH,
+                    y: FLOOR,
+                    vx: (self.rng.f32() - 0.5) * 6.0,
+                    vy: -3.0 - self.rng.f32() * 6.0,
+                    life: SPARK_LIFE,
+                    c: mul(c, 0.5),
+                });
+            }
+        }
+        self.landings = shot.landings;
+        let dt = 1.0 / f32::from(self.fps);
+        self.sparks.retain(|s| s.life > 0.0);
+        for s in &mut self.sparks {
+            wb.add(rd(s.x), rd(s.y), s.c, s.life / SPARK_LIFE);
+            s.x += s.vx * dt;
+            s.y += s.vy * dt;
+            s.life -= dt;
+        }
+    }
+
+    /// The bats, on the whole pane, over everything.
+    pub(crate) fn draw_over(&self, buf: &mut Buf, fit: &Fit, assets: &Assets) {
+        if let Some((Scene::Bats, t)) = self.playing {
+            bats::draw(buf, &assets.bat, &self.swarm, t, fit.n, fit.sigil_xy);
         }
     }
 

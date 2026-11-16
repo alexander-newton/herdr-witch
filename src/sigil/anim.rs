@@ -1,9 +1,10 @@
 //! Sigil lightning and summoning-witch animation (port of the mockup's
 //! `drawPent` / `drawWitch`). Bolts and sparks live in sigil-local pixel
 //! coordinates (0..n); `draw` offsets them onto the pane canvas.
+use super::familiars::{Familiars, Stage, toad};
 use super::fit::{Fit, Mode};
 use super::geometry::{Kind, SigilGeometry};
-use super::sprites::{Assets, Sprite, WitchSize};
+use super::sprites::{Assets, Sprite, WitchSize, colour};
 use crate::palette::*;
 use crate::render::raster::{Buf, line_pts, quant_octant};
 use std::f32::consts::PI;
@@ -40,10 +41,14 @@ pub struct SigilAnim {
     pent: Buf,
     witch: Buf,
     mask: Vec<bool>,
+    seed: u64,
+    /// The rare scenes (`sigil::familiars`). `None` unless switched on:
+    /// the pane's loop and the preview do that.
+    pub familiars: Option<Familiars>,
 }
 
 /// JS `Math.round` (half rounds up).
-fn rd(v: f32) -> i32 {
+pub(crate) fn rd(v: f32) -> i32 {
     (v + 0.5).floor() as i32
 }
 
@@ -80,7 +85,15 @@ impl SigilAnim {
             pent: Buf::default(),
             witch: Buf::default(),
             mask: Vec::new(),
+            seed,
+            familiars: None,
         }
+    }
+
+    /// Switch the familiars on, for a pane drawing `fps` frames a second.
+    pub fn enable_familiars(&mut self, fps: u8) {
+        // Their own random numbers, on a seed of their own.
+        self.familiars = Some(Familiars::new(self.seed ^ 0x6661_6d69_6c69_6172, fps));
     }
 
     fn rnd(&mut self, a: f32, b: f32) -> f32 {
@@ -203,6 +216,9 @@ impl SigilAnim {
         mode: Mode,
     ) {
         self.spawn(geo);
+        if let Some(f) = &mut self.familiars {
+            f.step(Stage::of(fit, assets), self.arms);
+        }
         let mut pent = std::mem::take(&mut self.pent);
         self.draw_pent(&mut pent, geo);
         buf.clear(BG);
@@ -214,9 +230,12 @@ impl SigilAnim {
                 WitchSize::Mini => &assets.mini,
             };
             let mut witch = std::mem::take(&mut self.witch);
-            self.draw_witch(&mut witch, geo.n, spr);
+            self.draw_witch(&mut witch, geo.n, spr, assets);
             blit(buf, &witch, xy);
             self.witch = witch;
+        }
+        if let Some(f) = &self.familiars {
+            f.draw_over(buf, fit, assets);
         }
         if mode == Mode::Octant {
             quant_octant(buf);
@@ -318,7 +337,7 @@ impl SigilAnim {
         }
     }
 
-    fn draw_witch(&mut self, wb: &mut Buf, n: usize, spr: &Sprite) {
+    fn draw_witch(&mut self, wb: &mut Buf, n: usize, spr: &Sprite, assets: &Assets) {
         let i = intensity(self.working, self.arms, self.t);
         let hh = spr.canvas_h;
         wb.reshape(n, hh);
@@ -333,8 +352,18 @@ impl SigilAnim {
             wb.set(x as i32, hh as i32 - 1, lerp_c(DEEP, HALO, 1.0 - d));
             wb.add(x as i32, hh as i32 - 2, HALO, (1.0 - d) * 0.4);
         }
+        if let Some(f) = &self.familiars {
+            f.draw_behind_witch(wb, assets);
+        }
         let sx = witch_x(n, spr);
         let sy = 1;
+        // The toad's scene: her hat is off (by this many pixels) while one
+        // hand holds it.
+        let toad = self.familiars.as_ref().and_then(Familiars::toad_shot);
+        let hat = toad
+            .filter(|s| s.hand.is_some())
+            .map(|s| (rd(s.hat.0), rd(s.hat.1)))
+            .filter(|off| *off != (0, 0));
         // The witch's silhouette, for the rim light: `mask[y * n + x]` for
         // x < n, y <= hh. A pixel elsewhere could not light a rim on the
         // canvas (the rim sits one row above its pixel), so it isn't kept.
@@ -346,12 +375,31 @@ impl SigilAnim {
                 mask[y as usize * n + x as usize] = true;
             }
         };
-        for j in 0..spr.h {
+        // With the hat off, its rows are drawn later, where she holds it.
+        let body_from = if hat.is_some() { toad::HAT_ROWS } else { 0 };
+        for j in body_from..spr.h {
             for k in 0..spr.w {
                 if let Some(c) = spr.px[j * spr.w + k] {
                     let p = (sx + k as i32, sy + j as i32);
                     wb.set(p.0, p.1, c);
                     mark(p);
+                }
+            }
+        }
+        if hat.is_some() {
+            // The top of her head, in her hair's colour.
+            let hair = colour('K').unwrap_or(DEEP);
+            let bare = &assets.bare;
+            for j in 0..bare.h {
+                for k in 0..bare.w {
+                    if bare.at(k, j).is_some() {
+                        let p = (
+                            sx + toad::BARE_AT.0 + k as i32,
+                            sy + toad::BARE_AT.1 + j as i32,
+                        );
+                        wb.set(p.0, p.1, hair);
+                        mark(p);
+                    }
                 }
             }
         }
@@ -362,7 +410,24 @@ impl SigilAnim {
         for (side, &(ox, oy)) in spr.shoulders.iter().enumerate() {
             let ang = if side == 0 { ang_l } else { ang_r };
             let (shx, shy) = ((sx + ox) as f32, (sy + oy) as f32);
-            let (hx, hy) = (shx + spr.arm_len * ang.cos(), shy + spr.arm_len * ang.sin());
+            let (mut hx, mut hy) = (shx + spr.arm_len * ang.cos(), shy + spr.arm_len * ang.sin());
+            // The hand on the hat goes where the toad's scene puts it.
+            let hat_hand = toad.and_then(|s| s.hand).filter(|_| side == 1);
+            if let Some(hand) = hat_hand {
+                (hx, hy) = (sx as f32 + hand.0, sy as f32 + hand.1);
+                if let Some((dx, dy)) = hat {
+                    // The hat where she holds it, in front of her other arm.
+                    for j in 0..toad::HAT_ROWS.min(spr.h) {
+                        for k in 0..spr.w {
+                            if let Some(c) = spr.px[j * spr.w + k] {
+                                let p = (sx + k as i32 + dx, sy + j as i32 + dy);
+                                wb.set(p.0, p.1, c);
+                                mark(p);
+                            }
+                        }
+                    }
+                }
+            }
             for (x, y) in line_pts(rd(shx), rd(shy), rd(hx), rd(hy)) {
                 for t in 0..spr.arm_thick as i32 {
                     wb.set(x, y + t, SLEEVE);
@@ -383,14 +448,19 @@ impl SigilAnim {
                 let (vx, vy) = (self.rnd(-0.4, 0.4), self.rnd(-1.0, -0.3));
                 let life = self.rnd(3.0, 7.0);
                 let c = if self.rng.f32() < 0.5 { CYAN } else { GOLD };
-                self.wsparks.push(Particle {
-                    x: hx,
-                    y: hy,
-                    vx,
-                    vy,
-                    life,
-                    c,
-                });
+                // The hand on the hat makes no sparks, but the random
+                // numbers above are drawn all the same: the sigil's
+                // sequence must not depend on a scene playing.
+                if hat_hand.is_none() {
+                    self.wsparks.push(Particle {
+                        x: hx,
+                        y: hy,
+                        vx,
+                        vy,
+                        life,
+                        c,
+                    });
+                }
             }
         }
         let rim = lerp_c(DEEP, GOLD, (i * 0.8).min(1.0));
@@ -402,6 +472,9 @@ impl SigilAnim {
             }
         }
         self.mask = mask;
+        if let Some(f) = &mut self.familiars {
+            f.draw_in_front_of_witch(wb, assets);
+        }
         self.wsparks.retain(|s| s.life > 0.0);
         for s in &mut self.wsparks {
             wb.add(rd(s.x), rd(s.y), s.c, (s.life / 4.0).min(1.0));
@@ -545,6 +618,159 @@ mod tests {
         });
         a.draw(&mut buf, &f, &geo, &assets, Mode::HalfBlock);
         assert_eq!(buf.get(f.sigil_xy.0, f.sigil_xy.1), BG);
+    }
+
+    use crate::sigil::familiars::{Scene, bats, cat, toad};
+
+    /// A pane with familiars switched on. 40 columns of half-blocks is
+    /// N = 40: the big witch, and no quantising.
+    fn stage(
+        cols: usize,
+        rows: usize,
+        mode: Mode,
+        seed: u64,
+    ) -> (Fit, SigilGeometry, Assets, Buf, SigilAnim) {
+        let (f, geo, assets) = setup(cols, rows, mode);
+        let buf = Buf::new(f.px_w, f.px_h);
+        let mut a = SigilAnim::new(seed);
+        a.enable_familiars(12);
+        (f, geo, assets, buf, a)
+    }
+
+    fn has(buf: &Buf, c: Rgb) -> bool {
+        buf.d.contains(&c)
+    }
+
+    #[test]
+    fn off_by_default_and_silent_when_idle() {
+        assert!(SigilAnim::new(1).familiars.is_none());
+        let (f, geo, assets, mut b1, mut on) = stage(40, 40, Mode::HalfBlock, 5);
+        let (mut b2, mut off) = (Buf::new(f.px_w, f.px_h), SigilAnim::new(5));
+        for i in 0..600 {
+            let typing = i % 100 < 30;
+            on.step(3, typing);
+            off.step(3, typing);
+            on.draw(&mut b1, &f, &geo, &assets, Mode::HalfBlock);
+            off.draw(&mut b2, &f, &geo, &assets, Mode::HalfBlock);
+            assert!(
+                on.familiars.as_ref().unwrap().idle(),
+                "seed 5 rolls nothing in 600 frames"
+            );
+            assert_eq!(b1.d, b2.d, "frame {i}");
+        }
+    }
+
+    #[test]
+    fn every_scene_draws_and_leaves_no_trace() {
+        for scene in Scene::ALL {
+            let (f, geo, assets, mut b1, mut on) = stage(40, 40, Mode::HalfBlock, 5);
+            let (mut b2, mut off) = (Buf::new(f.px_w, f.px_h), SigilAnim::new(5));
+            on.familiars.as_mut().unwrap().force(scene);
+            let mut differed = 0;
+            for i in 0..600 {
+                // Typing from frame 20: the toad has started by then.
+                let typing = (20..120).contains(&i);
+                on.step(0, typing);
+                off.step(0, typing);
+                on.draw(&mut b1, &f, &geo, &assets, Mode::HalfBlock);
+                off.draw(&mut b2, &f, &geo, &assets, Mode::HalfBlock);
+                if on.familiars.as_ref().unwrap().idle() {
+                    assert_eq!(b1.d, b2.d, "{scene:?}: frame {i} after the scene");
+                } else {
+                    differed += usize::from(b1.d != b2.d);
+                }
+            }
+            assert!(differed > 50, "{scene:?} drew on {differed} frames");
+            assert!(on.familiars.as_ref().unwrap().idle(), "{scene:?} ended");
+        }
+    }
+
+    #[test]
+    fn cat_eyes_turn_red_only_mid_scene() {
+        // N = 40: the cat stops at 2.25 s and its eyes redden from 6.3 s to
+        // 8.3 s, frames 76 to 100 at 12 fps.
+        let (f, geo, assets, mut buf, mut a) = stage(40, 40, Mode::HalfBlock, 5);
+        a.familiars.as_mut().unwrap().force(Scene::Cat);
+        let (mut amber, mut body) = (false, false);
+        let mut red = Vec::new();
+        for i in 0..600 {
+            a.step(0, false);
+            a.draw(&mut buf, &f, &geo, &assets, Mode::HalfBlock);
+            amber |= has(&buf, cat::AMBER);
+            body |= has(&buf, cat::BODY);
+            if buf.d.iter().any(|c| c[0] > 200.0 && c[1] < 100.0) {
+                red.push(i);
+            }
+        }
+        assert!(amber && body);
+        assert!(red.len() >= 5, "{red:?}");
+        assert!(red[0] > 70 && *red.last().unwrap() < 105, "{red:?}");
+        assert!(
+            !has(&buf, cat::AMBER) && !has(&buf, cat::BODY),
+            "gone by the end"
+        );
+    }
+
+    #[test]
+    fn bats_and_toad_use_their_colours() {
+        for (scene, colour) in [(Scene::Bats, bats::BODY), (Scene::Toad, toad::BODY)] {
+            let (f, geo, assets, mut buf, mut a) = stage(40, 40, Mode::HalfBlock, 5);
+            a.familiars.as_mut().unwrap().force(scene);
+            let mut seen = false;
+            for _ in 0..400 {
+                a.step(0, false);
+                a.draw(&mut buf, &f, &geo, &assets, Mode::HalfBlock);
+                seen |= has(&buf, colour);
+            }
+            assert!(seen, "{scene:?}");
+        }
+    }
+
+    #[test]
+    fn the_new_colours_are_dim() {
+        let luma = |c: Rgb| 0.3 * c[0] + 0.59 * c[1] + 0.11 * c[2];
+        assert!(luma(cat::BODY) < luma(BG));
+        assert!(luma(bats::BODY) < 40.0 && luma(bats::BODY) > luma(BG));
+        assert!(luma(cat::RIM) + luma(BG) < 50.0);
+        assert!(luma(toad::BODY) < 100.0);
+    }
+
+    #[test]
+    fn scenes_survive_every_size_and_a_resize() {
+        for (c, r) in [
+            (4, 2),
+            (6, 12),
+            (13, 30),
+            (17, 30),
+            (27, 40),
+            (34, 40),
+            (40, 60),
+        ] {
+            for m in [Mode::HalfBlock, Mode::Octant] {
+                for scene in Scene::ALL {
+                    let (f, geo, assets, mut buf, mut a) = stage(c, r, m, 3);
+                    a.familiars.as_mut().unwrap().force(scene);
+                    for i in 0..400 {
+                        // Typing only once the toad has had its chance to start.
+                        a.step(8, i >= 30);
+                        a.draw(&mut buf, &f, &geo, &assets, m);
+                    }
+                }
+            }
+        }
+        // The pane shrinks under a playing scene: dropped, and nothing breaks.
+        let (f, geo, assets, mut buf, mut a) = stage(40, 40, Mode::HalfBlock, 3);
+        a.familiars.as_mut().unwrap().force(Scene::Toad);
+        for _ in 0..30 {
+            a.step(0, false);
+            a.draw(&mut buf, &f, &geo, &assets, Mode::HalfBlock);
+        }
+        assert!(!a.familiars.as_ref().unwrap().idle());
+        let (f2, geo2, _) = setup(20, 40, Mode::HalfBlock);
+        let mut small = Buf::new(f2.px_w, f2.px_h);
+        a.step(0, false);
+        a.draw(&mut small, &f2, &geo2, &assets, Mode::HalfBlock);
+        assert!(a.familiars.as_ref().unwrap().idle());
     }
 
     #[test]
