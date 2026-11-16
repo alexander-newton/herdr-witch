@@ -6,7 +6,7 @@
 //! events over a channel; the main loop wakes at least every 100 ms to
 //! handle them, serve "Summon here" requests, decorate queued tabs, poll
 //! for typing (250 ms) and agents (1 s), and publish the global state for
-//! the sigil and grimoire panes (every 250 ms and on change). Any socket
+//! the sigil and grimoire panes (on change, and every second). Any socket
 //! error or the end of the stream drops the connection; the daemon backs
 //! off, reconnects, resubscribes and reconciles (after checking it is still
 //! the same server, `restore::check_server`).
@@ -70,7 +70,9 @@ const TYPING_POLL_MS: u64 = 250;
 const AGENTS_POLL_MS: u64 = 1000;
 /// The visible tab is re-read this often, in case a `tab_focused` is missed.
 const VISIBLE_POLL_MS: u64 = 1000;
-const WRITE_MS: u64 = 250;
+/// The state is written on every change; this is only the heartbeat that
+/// keeps it from going stale for the panes (`ipc::STALE_MS`, 3 s).
+const WRITE_MS: u64 = 1000;
 /// A daemon that can't reach its server for this long exits.
 const GIVE_UP_MS: u64 = 120_000;
 /// How often the daemon looks at its own executable.

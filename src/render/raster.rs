@@ -1,5 +1,6 @@
 use crate::palette::Rgb;
 
+#[derive(Default)]
 pub struct Buf {
     pub w: usize,
     pub h: usize,
@@ -56,7 +57,9 @@ impl Buf {
     }
 
     pub fn to_u8(&self, x: usize, y: usize) -> [u8; 3] {
-        self.get(x, y).map(|v| v.clamp(0.0, 255.0).round() as u8)
+        // Rounds half up, exactly (in f64), and the cast saturates to
+        // 0..=255: `v.clamp(0.0, 255.0).round()` without the libm call.
+        self.get(x, y).map(|v| (f64::from(v) + 0.5) as u8)
     }
 }
 
@@ -101,23 +104,33 @@ pub fn quant_octant(buf: &mut Buf) {
     let (w, h) = (buf.w, buf.h);
     for by in (0..h).step_by(4) {
         for bx in (0..w).step_by(2) {
-            let mut idx = Vec::with_capacity(8);
+            // The block's pixel indices, in a fixed array (no allocation).
+            let mut idx = [0usize; 8];
+            let mut len = 0;
             for y in by..(by + 4).min(h) {
                 for x in bx..(bx + 2).min(w) {
-                    idx.push(y * w + x);
+                    idx[len] = y * w + x;
+                    len += 1;
                 }
             }
+            let idx = &idx[..len];
+            // Most blocks are plain background: nothing to reduce.
+            if idx.iter().all(|&i| buf.d[i] == buf.d[idx[0]]) {
+                continue;
+            }
             let (mut lo, mut hi) = (idx[0], idx[0]);
-            for &i in &idx {
-                if luma(buf.d[i]) < luma(buf.d[lo]) {
-                    lo = i;
+            let (mut llo, mut lhi) = (luma(buf.d[lo]), luma(buf.d[hi]));
+            for &i in idx {
+                let l = luma(buf.d[i]);
+                if l < llo {
+                    (lo, llo) = (i, l);
                 }
-                if luma(buf.d[i]) > luma(buf.d[hi]) {
-                    hi = i;
+                if l > lhi {
+                    (hi, lhi) = (i, l);
                 }
             }
             let (cl, ch) = (buf.d[lo], buf.d[hi]);
-            for &i in &idx {
+            for &i in idx {
                 let p = buf.d[i];
                 buf.d[i] = if dist(p, cl) <= dist(p, ch) { cl } else { ch };
             }

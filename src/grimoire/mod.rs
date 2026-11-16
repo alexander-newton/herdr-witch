@@ -46,6 +46,7 @@ pub fn run(cfg: &Config) {
     let mut fitted_cols = usize::MAX;
     let own = ipc::own_tab();
     let mut gate = HiddenGate::default();
+    let mut shown = String::new();
     loop {
         let (cols, rows) = term_size();
         let st = ipc::read_state(&dir, ipc::now_ms());
@@ -59,8 +60,13 @@ pub fn run(cfg: &Config) {
             view.set_line(&pool.fit_line(idx, cols));
         }
         view.tick(st.working);
-        if out.frame(&view.render_line(cols, rows)).is_err() {
-            return;
+        // Many ticks change nothing; the line on screen is then left alone.
+        let body = view.render_line(cols, rows);
+        if body != shown {
+            if out.frame(&body).is_err() {
+                return;
+            }
+            shown = body;
         }
         pacer.wait();
     }

@@ -302,10 +302,10 @@ fn runtime_step_publishes_state_and_serves_summons() {
     rt.step(&mut h, &[], 2_000 + MOVE_GRACE_MS).unwrap();
     assert!(rt.st.store.tabs.contains_key(&TabKey::from(t.as_str())));
 
-    // State is rewritten every 250 ms even when nothing changes.
+    // State is rewritten every second even when nothing changes.
     let written = crate::ipc::read_state(&run_dir, 2_400).written_ms;
-    rt.step(&mut h, &[], 2_700).unwrap();
-    assert!(crate::ipc::read_state(&run_dir, 2_700).written_ms > written);
+    rt.step(&mut h, &[], 3_500).unwrap();
+    assert!(crate::ipc::read_state(&run_dir, 3_500).written_ms > written);
 }
 
 #[test]

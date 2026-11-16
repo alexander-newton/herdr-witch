@@ -6,7 +6,6 @@ use super::geometry::{Kind, SigilGeometry};
 use super::sprites::{Assets, Sprite, WitchSize};
 use crate::palette::*;
 use crate::render::raster::{Buf, line_pts, quant_octant};
-use std::collections::HashSet;
 use std::f32::consts::PI;
 
 type Pt = (f32, f32);
@@ -37,6 +36,10 @@ pub struct SigilAnim {
     pub(crate) bolts: Vec<Bolt>,
     pub(crate) sparks: Vec<Particle>,
     pub(crate) wsparks: Vec<Particle>,
+    /// Scratch canvases for the sigil and the witch, kept across frames.
+    pent: Buf,
+    witch: Buf,
+    mask: Vec<bool>,
 }
 
 /// JS `Math.round` (half rounds up).
@@ -74,6 +77,9 @@ impl SigilAnim {
             bolts: Vec::new(),
             sparks: Vec::new(),
             wsparks: Vec::new(),
+            pent: Buf::default(),
+            witch: Buf::default(),
+            mask: Vec::new(),
         }
     }
 
@@ -197,16 +203,20 @@ impl SigilAnim {
         mode: Mode,
     ) {
         self.spawn(geo);
-        let pent = self.draw_pent(geo);
+        let mut pent = std::mem::take(&mut self.pent);
+        self.draw_pent(&mut pent, geo);
         buf.clear(BG);
         blit(buf, &pent, fit.sigil_xy);
+        self.pent = pent;
         if let Some((size, xy)) = fit.witch {
             let spr = match size {
                 WitchSize::Big => &assets.big,
                 WitchSize::Mini => &assets.mini,
             };
-            let witch = self.draw_witch(geo.n, spr);
+            let mut witch = std::mem::take(&mut self.witch);
+            self.draw_witch(&mut witch, geo.n, spr);
             blit(buf, &witch, xy);
+            self.witch = witch;
         }
         if mode == Mode::Octant {
             quant_octant(buf);
@@ -226,11 +236,11 @@ impl SigilAnim {
         }
     }
 
-    fn draw_pent(&mut self, geo: &SigilGeometry) -> Buf {
+    fn draw_pent(&mut self, pb: &mut Buf, geo: &SigilGeometry) {
         let n = self.working as f32;
         let nn = geo.n;
         let i = intensity(self.working, self.arms, self.t);
-        let mut pb = Buf::new(nn, nn);
+        pb.reshape(nn, nn);
         pb.clear(BG);
         let mut f = 1.0 - self.rng.f32() * (0.06 + n * 0.07);
         let strike = self.rng.f32()
@@ -306,13 +316,12 @@ impl SigilAnim {
         for s in &self.sparks {
             pb.add(rd(s.x), rd(s.y), s.c, (s.life / 6.0).min(1.0));
         }
-        pb
     }
 
-    fn draw_witch(&mut self, n: usize, spr: &Sprite) -> Buf {
+    fn draw_witch(&mut self, wb: &mut Buf, n: usize, spr: &Sprite) {
         let i = intensity(self.working, self.arms, self.t);
         let hh = spr.canvas_h;
-        let mut wb = Buf::new(n, hh);
+        wb.reshape(n, hh);
         wb.clear(BG);
         for y in 0..hh.min(6) {
             for x in 0..n {
@@ -326,13 +335,23 @@ impl SigilAnim {
         }
         let sx = rd((n as f32 - spr.w as f32) / 2.0);
         let sy = 1;
-        let mut mask: HashSet<(i32, i32)> = HashSet::new();
+        // The witch's silhouette, for the rim light: `mask[y * n + x]` for
+        // x < n, y <= hh. A pixel elsewhere could not light a rim on the
+        // canvas (the rim sits one row above its pixel), so it isn't kept.
+        let mut mask = std::mem::take(&mut self.mask);
+        mask.clear();
+        mask.resize(n * (hh + 1), false);
+        let mut mark = |(x, y): (i32, i32)| {
+            if x >= 0 && y >= 0 && (x as usize) < n && y as usize <= hh {
+                mask[y as usize * n + x as usize] = true;
+            }
+        };
         for j in 0..spr.h {
             for k in 0..spr.w {
                 if let Some(c) = spr.px[j * spr.w + k] {
                     let p = (sx + k as i32, sy + j as i32);
                     wb.set(p.0, p.1, c);
-                    mask.insert(p);
+                    mark(p);
                 }
             }
         }
@@ -347,7 +366,7 @@ impl SigilAnim {
             for (x, y) in line_pts(rd(shx), rd(shy), rd(hx), rd(hy)) {
                 for t in 0..spr.arm_thick as i32 {
                     wb.set(x, y + t, SLEEVE);
-                    mask.insert((x, y + t));
+                    mark((x, y + t));
                 }
             }
             let (hs, o): (&[(i32, i32)], i32) = if spr.arm_thick == 2 {
@@ -358,7 +377,7 @@ impl SigilAnim {
             for &(dx, dy) in hs {
                 let p = (rd(hx) + dx - o, rd(hy) + dy - o);
                 wb.set(p.0, p.1, SKIN);
-                mask.insert(p);
+                mark(p);
             }
             if a > 0.7 && self.rng.f32() < 0.5 {
                 let (vx, vy) = (self.rnd(-0.4, 0.4), self.rnd(-1.0, -0.3));
@@ -375,11 +394,14 @@ impl SigilAnim {
             }
         }
         let rim = lerp_c(DEEP, GOLD, (i * 0.8).min(1.0));
-        for &(x, y) in &mask {
-            if !mask.contains(&(x, y - 1)) {
-                wb.add(x, y - 1, rim, 0.5);
+        for y in 1..=hh {
+            for x in 0..n {
+                if mask[y * n + x] && !mask[(y - 1) * n + x] {
+                    wb.add(x as i32, y as i32 - 1, rim, 0.5);
+                }
             }
         }
+        self.mask = mask;
         self.wsparks.retain(|s| s.life > 0.0);
         for s in &mut self.wsparks {
             wb.add(rd(s.x), rd(s.y), s.c, (s.life / 4.0).min(1.0));
@@ -387,7 +409,6 @@ impl SigilAnim {
             s.y += s.vy;
             s.life -= 1.0;
         }
-        wb
     }
 }
 
@@ -405,6 +426,7 @@ mod tests {
     use crate::sigil::fit::fit;
     use crate::sigil::geometry::build;
     use crate::sigil::sprites::load_assets;
+    use std::collections::HashSet;
 
     fn setup(cols: usize, rows: usize, mode: Mode) -> (Fit, SigilGeometry, Assets) {
         let assets = load_assets(None);
