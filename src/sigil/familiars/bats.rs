@@ -13,10 +13,11 @@ pub const BODY: Rgb = [40.0, 24.0, 62.0];
 
 /// The smallest sigil that gets bats.
 pub const MIN_N: usize = 16;
-/// Seconds on each leg of the path.
-pub const FLY_IN: f32 = 2.0;
-pub const SPIRAL: f32 = 9.0;
-pub const FLY_OUT: f32 = 2.0;
+/// Seconds on each leg of the path. The legs in and out are timed so the
+/// swarm keeps roughly the pace it has at the spiral's ends.
+pub const FLY_IN: f32 = 1.2;
+pub const SPIRAL: f32 = 10.5;
+pub const FLY_OUT: f32 = 2.5;
 /// Seconds between the first bat and the last.
 pub const SPREAD: f32 = 1.2;
 /// The spiral's radius at its start and end, as a share of the sigil.
@@ -38,7 +39,7 @@ pub fn swarm(n: usize, rng: &mut fastrand::Rng) -> Vec<Bat> {
         .map(|i| Bat {
             delay: if i == 0 { 0.0 } else { rng.f32() * SPREAD },
             phase: rng.f32() * TAU,
-            amp: 1.0 + rng.f32() * 1.5,
+            amp: 2.0 + rng.f32() * 3.0,
         })
         .collect()
 }
@@ -178,7 +179,7 @@ mod tests {
         assert_eq!(s[0].delay, 0.0);
         assert!(
             s.iter()
-                .all(|b| (0.0..=SPREAD).contains(&b.delay) && (1.0..=2.5).contains(&b.amp))
+                .all(|b| (0.0..=SPREAD).contains(&b.delay) && (2.0..=5.0).contains(&b.amp))
         );
         let ((x, _), pose) = bat_at(&s[0], 0.0, N);
         assert!(x < 3.0 && pose < 2);

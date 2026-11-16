@@ -1,6 +1,6 @@
 # Familiars: three rare scenes in the sigil pane — design
 
-Date: 2026-11-16 · Status: awaiting approval (reviewed; nothing left open)
+Date: 2026-11-16 · Status: approved; built (the look was revised when tuning, see "The look")
 
 ## Intent
 
@@ -25,9 +25,9 @@ duration and "nothing moves fast" disagree, slow wins.
    turns to face the viewer. It blinks; its eyes turn red and return to
    normal; it blinks again. Then it stands and walks on, passing behind the
    witch, and out at the left.
-2. **Bats (about 10 s).** A swarm of bats comes in from the top left,
+2. **Bats (about 15 s).** A swarm of bats comes in from the top left,
    spirals in front of the sigil, and leaves at the right.
-3. **Toad (about 12 s).** The witch takes off her hat. A large magical toad
+3. **Toad (about 10 s).** The witch takes off her hat. A large magical toad
    is sitting on top of her hair. It jumps down to the floor and hops
    slowly out at the left. She puts the hat back on.
 
@@ -144,7 +144,7 @@ eyes fade to red and back over about 2 s, it blinks again, waits a moment,
 stands and walks on. It is drawn behind the witch for the whole scene; it
 only overlaps her on the way out.
 
-**Bats.** Between five and nine, by pane size, each 3×2 px with a two-pose
+**Bats.** Between five and nine, by pane size, each 5×3 px with a two-pose
 flap. The swarm follows one path: in from beyond the top left of the sigil
 to its upper-left rim, about two turns of an inward spiral around the
 centre, then out along the tangent to the right edge. Each bat follows the
@@ -156,7 +156,7 @@ path with its own delay, spread over about a second, and a small wobble.
    0.8 s).
 2. She takes the hat off sideways and down and holds it beside her (about
    1 s). Under it are the top of her head, in the same hair colour, and the
-   toad sitting on it. The toad is about as wide as her head.
+   toad sitting on it. The toad (11×7 px) is a little wider than her head.
 3. The toad waits a beat (about 1.2 s), then leaps in an arc to the floor
    on her left (about 0.9 s) and lands with a few small sparks.
 4. She puts the hat back and lowers her arm (about 1.2 s) while the toad
@@ -183,8 +183,14 @@ cone, so it may be revealed as the hat's brim uncovers it.
 - **Bats:** a dim violet-grey, a little lighter than the background. They
   hide what they pass over, so against the sigil's lines they show as
   moving gaps.
-- **Toad:** muted green with a darker underside and gold eyes. Its sparks
+- **Toad:** muted green with a darker underside and dark eyes. Its sparks
   are the witch's existing cyan and gold sparks, dimmer.
+- **What octant mode allows** (found when tuning): a cell shows only its
+  darkest and brightest colour, so anything brighter than a sprite's body
+  takes one of the two and the body around it is drawn as background.
+  Hence the toad's eyes are dark, not gold; the cat's bright eyes work
+  only because its body is the darkest thing in the pane; and the light
+  on the cat's edges is kept very faint.
 - Nothing else changes: the sigil, its lightning and the witch's own rim
   light behave exactly as without a scene.
 

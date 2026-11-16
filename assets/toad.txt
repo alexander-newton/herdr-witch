@@ -1,13 +1,15 @@
-.oT...To.
-TTTTTTTTT
-TTTTTTTTT
-TTTTTTTTT
-tTTtttTTt
-tt.....tt
+..TT...TT..
+.ToTT.TToT.
+TTTTTTTTTTT
+TTTTTTTTTTT
+TTTTTTTTTTT
+tTTTtttTTTt
+tt.tt.tt.tt
 
-.oTT.....
-TTTTTTT..
-.TTTTTTTT
-..tTTTTTt
-....t..tt
-.......t.
+..TT.......
+.ToTTT.....
+TTTTTTTT...
+.TTTTTTTTT.
+T..TTTTTTTT
+.....tt..tt
+..........t

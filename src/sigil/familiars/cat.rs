@@ -10,9 +10,12 @@ use crate::sigil::sprites::Pose;
 use std::f32::consts::PI;
 
 /// Darker than the background: a black cat.
-pub const BODY: Rgb = [3.0, 2.0, 6.0];
+pub const BODY: Rgb = [0.0, 0.0, 0.0];
 /// A dim light added along its top edges, so its outline can be made out.
-pub const RIM: Rgb = [32.0, 14.0, 49.0];
+/// It must stay this faint: in octant mode a cell shows two colours, and
+/// with a stronger light the background in the cat's cells would be drawn
+/// in the cat's black (the nearer of the two), filling its outline in.
+pub const RIM: Rgb = [12.0, 5.0, 19.0];
 /// Its eyes, and what they turn in the middle of the scene.
 pub const AMBER: Rgb = [230.0, 160.0, 50.0];
 pub const RED: Rgb = [230.0, 40.0, 30.0];
@@ -79,7 +82,7 @@ pub fn shot(t: f32, n: usize, witch_x: i32) -> Shot {
     let stop = stop_x(witch_x);
     let walking = |x: f32| Shot {
         x,
-        pose: if (t / STRIDE) as usize % 2 == 0 {
+        pose: if ((t / STRIDE) as usize).is_multiple_of(2) {
             WALK_A
         } else {
             WALK_B

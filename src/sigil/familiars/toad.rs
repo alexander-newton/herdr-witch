@@ -8,10 +8,12 @@ use crate::render::raster::Buf;
 use crate::sigil::anim::rd;
 use crate::sigil::sprites::Pose;
 
-/// Muted green, a darker underside, gold eyes.
+/// Muted green, a darker underside, dark eyes. Nothing on the toad is
+/// brighter than its body: in octant mode a cell shows two colours, and a
+/// bright eye would take one of them, leaving holes in the body around it.
 pub const BODY: Rgb = [62.0, 104.0, 58.0];
-pub const UNDER: Rgb = [38.0, 66.0, 44.0];
-pub const EYE: Rgb = [220.0, 180.0, 70.0];
+pub const UNDER: Rgb = [48.0, 82.0, 50.0];
+pub const EYE: Rgb = [10.0, 14.0, 10.0];
 
 /// The poses in `assets/toad.txt`, in the file's order.
 pub const SIT: usize = 0;
@@ -23,7 +25,7 @@ pub const HAT_ROWS: usize = 10;
 /// is on the strip's top row, under the sigil.
 pub const HAT_OFF: (f32, f32) = (9.0, 7.0);
 /// The toad's width in pixels.
-pub const WIDTH: f32 = 9.0;
+pub const WIDTH: f32 = 11.0;
 /// Where the top of her head (`assets/witch_bare.txt`) goes, in
 /// witch-sprite pixels.
 pub const BARE_AT: (i32, i32) = (4, 6);
@@ -48,9 +50,9 @@ const GRIP: (f32, f32) = (15.0, 8.0);
 /// Where her lowered arm leaves her hand.
 const HAND_REST: (f32, f32) = (15.05, 18.73);
 /// The toad on her head: its left edge from the witch's, and its feet row.
-const ON_HEAD: (i32, f32) = (4, 6.0);
+const ON_HEAD: (i32, f32) = (3, 6.0);
 /// Where the leap lands: the toad's left edge from the witch's.
-const LANDING: i32 = -8;
+const LANDING: i32 = -14;
 /// How strongly the leap bows upwards: it rises about 3 px first.
 const LEAP_ARC: f32 = 36.0;
 
@@ -84,11 +86,15 @@ fn landed_at() -> f32 {
     REACH + LIFT + WAIT + JUMP
 }
 
+/// Where the leap lands (the toad's left edge, strip pixels): clear of her
+/// robe, but not beyond the strip's edge where the strip is narrow.
+fn landing_x(witch_x: i32) -> f32 {
+    (witch_x + LANDING).max(0) as f32
+}
+
 /// Hops from the landing until the toad is past the left edge.
 fn hops(witch_x: i32) -> u32 {
-    (((witch_x + LANDING) as f32 + WIDTH) / HOP_LEN)
-        .ceil()
-        .max(0.0) as u32
+    ((landing_x(witch_x) + WIDTH) / HOP_LEN).ceil() as u32
 }
 
 /// The scene's length: a moment after the hat is back and the toad gone.
@@ -127,7 +133,7 @@ pub fn shot(t: f32, witch_x: i32) -> Shot {
     };
 
     let head = ((witch_x + ON_HEAD.0) as f32, ON_HEAD.1);
-    let floor_x = (witch_x + LANDING) as f32;
+    let floor_x = landing_x(witch_x);
     let (toad, landings) = if t < lift {
         (None, 0)
     } else if t < jump {
@@ -213,13 +219,21 @@ mod tests {
         assert_eq!(shot(REACH * 0.5, WX).toad, None);
         assert!(shot(REACH + 0.001, WX).shown < 0.1);
         let sitting = shot(REACH + LIFT + WAIT * 0.5, WX);
-        assert_eq!(sitting.toad, Some((25.0, 6.0, SIT)));
+        assert_eq!(sitting.toad, Some((24.0, 6.0, SIT)));
         assert_eq!(sitting.shown, WIDTH);
         let mid = shot(REACH + LIFT + WAIT + JUMP * 0.5, WX).toad.unwrap();
         assert_eq!(mid.2, LEAP);
         let landed = shot(REACH + LIFT + WAIT + JUMP + 0.01, WX);
-        assert_eq!(landed.toad, Some((13.0, FLOOR, SIT)));
+        assert_eq!(landed.toad, Some((7.0, FLOOR, SIT)));
         assert_eq!(landed.landings, 1);
+    }
+
+    #[test]
+    fn lands_inside_a_narrow_strip() {
+        // N = 34: 14 px left of her would be off the strip's edge.
+        let landed = shot(REACH + LIFT + WAIT + JUMP + 0.01, 9);
+        assert_eq!(landed.toad, Some((0.0, FLOOR, SIT)));
+        assert!(shot(duration(9), 9).toad.unwrap().0 <= -WIDTH);
     }
 
     #[test]
@@ -234,7 +248,7 @@ mod tests {
         assert!(s.windows(2).all(|w| w[1].1.landings >= w[0].1.landings));
         let end = shot(duration(WX), WX);
         assert!(end.toad.unwrap().0 <= -WIDTH);
-        assert_eq!(end.landings, 1 + 4, "22 px to cover in 6 px hops");
+        assert_eq!(end.landings, 1 + 3, "18 px to cover in 6 px hops");
         assert!((9.0..16.0).contains(&duration(WX)), "{}", duration(WX));
     }
 }

@@ -221,7 +221,7 @@ mod tests {
         assert_eq!(a.cat.len(), 4);
         assert!(a.cat.iter().all(|p| (p.w, p.h) == (12, 7)));
         assert_eq!(a.toad.len(), 2);
-        assert!(a.toad.iter().all(|p| (p.w, p.h) == (9, 6)));
+        assert!(a.toad.iter().all(|p| (p.w, p.h) == (11, 7)));
         assert_eq!(a.bat.len(), 2);
         assert_eq!((a.bare.w, a.bare.h), (9, 4));
         assert_eq!(a.cat[3].at(2, 2), Some('o'));

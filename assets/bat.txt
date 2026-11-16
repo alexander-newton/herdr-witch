@@ -1,5 +1,7 @@
-B.B
-.B.
+B...B
+BB.BB
+..B..
 
-.B.
-B.B
+..B..
+BBBBB
+B.B.B
